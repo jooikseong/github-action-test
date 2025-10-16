@@ -1,82 +1,60 @@
-## 1 워크플로의 이름 지정
-#name: CI
+#name: CI and remote deploy (SSH password)
 #
-## 2 워크플로가 시작될 조건 지정
 #on:
 #  push:
 #    branches: [ main ]
 #
 #jobs:
-#  build:
-#    runs-on: ubuntu-latest # 3 실행 환경 지정
-#    #4 실행스텝지정
+#  build-and-deploy:
+#    runs-on: ubuntu-latest
 #    steps:
-#      - uses: actions/checkout@v3
+#      - uses: actions/checkout@v4
 #
-#      - uses: actions/setup-java@v3
-#        with:
-#          distribution: 'zulu'
-#          java-version: '17'
+#      - name: Install deps & build
+#        run: |
+#          npm ci
+#          npm run build
 #
-#      - name: Grant execute permission for gradlew
-#        run: chmod +x gradlew
-#
-#      - name: Build with Gradle
-#        run: ./gradlew clean build
-name: CI
+#      - name: Copy build to server (using sshpass)
+#        env:
+#          SSH_HOST: ${{ secrets.SSH_HOST }}
+#          SSH_USER: ${{ secrets.SSH_USER }}
+#          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+#          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+#        run: |
+#          sudo apt-get update && sudo apt-get install -y sshpass
+#          sshpass -p "$SSH_PASSWORD" scp -P $SSH_PORT -r ./build "$SSH_USER@$SSH_HOST:/var/www/myapp"
+#          sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no -p $SSH_PORT "$SSH_USER@$SSH_HOST" "sudo systemctl restart myapp.service"
+
+name: Hello to On-Prem
 
 on:
-  push:
-    branches: [ main, develop, "feature/**" ]
-  pull_request:
+  workflow_dispatch: # 수동 실행 버튼
 
 permissions:
   contents: read
 
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  nextjs-ci:
-    name: Node ${{ matrix.node }} • CI
+  hello:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node: [18, 20, 22] # Next.js 권장 LTS 포함
-
-    env:
-      CI: "true"
-      NEXT_TELEMETRY_DISABLED: "1"
 
     steps:
-      - name: Checkout
+      - name: Checkout (optional)
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: SSH and create helloworld
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          node-version: ${{ matrix.node }}
-          cache: npm
-
-      - name: Install dependencies
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
-
-      - name: Lint (if present)
-        run: npm run lint --if-present
-
-      - name: Type check (if present)
-        run: npm run typecheck --if-present
-        # 예: package.json에 "typecheck": "tsc --noEmit" 스크립트 추가
-
-      - name: Test (if present)
-        run: npm test --if-present -- --ci
-
-      - name: Build
-        run: npm run build
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: ${{ secrets.SSH_PORT }}
+          script_stop: true
+          script: |
+            set -e
+            mkdir -p /tmp/ga-test
+            echo "hello from GitHub Actions @ $(date -u +'%Y-%m-%d %H:%M:%S UTC')" > /tmp/ga-test/helloworld.txt
+            ls -al /tmp/ga-test
+            echo "---- file content ----"
+            cat /tmp/ga-test/helloworld.txt
+            echo "----------------------"
