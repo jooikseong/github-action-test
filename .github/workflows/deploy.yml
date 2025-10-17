@@ -1,0 +1,37 @@
+name: Deploy to On-Prem Server
+
+#on:
+#  push:
+#    branches:
+#      - main  # main 브랜치에 push될 때 실행
+
+on:
+  workflow_dispatch: # 수동 실행 버튼
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Deploy to server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script_stop: true
+          script: |
+            set -e
+            cd /var/www/next-app
+            echo "📦 Pulling latest source..."
+            git pull origin main
+            echo "📦 Installing dependencies..."
+            npm install
+            echo "🏗️ Building Next.js..."
+            npm run build
+            echo "🚀 Restarting PM2..."
+            pm2 restart next-app || pm2 start npm --name "next-app" -- start
